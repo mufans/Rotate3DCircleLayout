@@ -13,6 +13,7 @@ import android.view.ViewGroup;
 import android.view.animation.LinearInterpolator;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -68,6 +69,7 @@ public class Rotate3DCircleLayout extends ViewGroup {
     private int touchSlop;
 
     private List<View> viewList = new LinkedList<>();
+    private List<CircleItem> itemList = new ArrayList<>();
 
     private OnItemClickListener listener;
 
@@ -130,7 +132,6 @@ public class Rotate3DCircleLayout extends ViewGroup {
         int width = getMeasuredWidth();
         int height = getMeasuredHeight();
         int childCount = getChildCount();
-        float ratioTmp = 0;
         int left = 0;
         int top = 0;
         for (int i = 0; i < childCount; i++) {
@@ -142,13 +143,37 @@ public class Rotate3DCircleLayout extends ViewGroup {
             float ratio = (2 * radius - distance / SCALE_DISTANCE_FACOTR) * factor / (2 * radius);
             child.setScaleX(ratio);
             child.setScaleY(ratio);
-            if (ratioTmp < ratio) {
-                ratioTmp = ratio;
-                bringChildToFront(child);//将最前的view层级切换到最前
-            }
             left = centerX - child.getMeasuredWidth() / 2;
             top = height / 2 - child.getMeasuredHeight() / 2;
             child.layout(left, top, left + child.getMeasuredWidth(), top + child.getMeasuredHeight());
+        }
+
+        reorderZLevel();
+    }
+
+
+    /**
+     * 调整z轴层次
+     */
+    private void reorderZLevel() {
+        int childCount = getChildCount();
+        //更新每个item距离
+        for (int i = 0; i < childCount; i++) {
+            CircleItem circleItem = itemList.get(i);
+            View child = circleItem.view;
+            int realIndex = viewList.indexOf(child);
+            circleItem.distance = getDistanceByIndex(realIndex);
+        }
+        //根据逻辑距离排序
+        Collections.sort(itemList);
+        for (int i = 0; i < childCount; i++) {
+            CircleItem circleItem = itemList.get(i);
+            View child = circleItem.view;
+            int layerLevel = indexOfChild(child);
+            //判断View层次，如果小于计算的层次，则往前调整
+            if (layerLevel < i) {
+                bringChildToFront(child);
+            }
         }
     }
 
@@ -167,8 +192,13 @@ public class Rotate3DCircleLayout extends ViewGroup {
                     }
                 }
             });
+            CircleItem circleItem = new CircleItem();
+            circleItem.view = child;
+            circleItem.distance = getDistanceByIndex(i);
+            itemList.add(circleItem);
             viewList.add(child);
         }
+        Collections.sort(itemList);
         spliteAngle = (360 / getChildCount());
 
     }
@@ -354,6 +384,20 @@ public class Rotate3DCircleLayout extends ViewGroup {
      */
     private int getChildAngle(int index) {
         return index * spliteAngle + accAngle;
+    }
+
+    /**
+     * 获取某个位置的childview相对屏幕的距离
+     *
+     * @param index
+     * @return
+     */
+    private float getDistanceByIndex(int index) {
+        float radains = angleToRadians(index * spliteAngle + accAngle); //child当前的弧度
+        int centerX = getMeasuredWidth() / 2 + (int) (Math.sin(radains) * radius + 0.5f); //每个圆的圆心的 x坐标
+        float x = (float) (radius * Math.cos(radains));
+        float distance = radius - x; //每个圆相对于屏幕z轴的距离
+        return distance;
     }
 
     public void setOnItemClickListener(OnItemClickListener onItemClickListener) {
